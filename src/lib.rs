@@ -4,7 +4,6 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use worker::*;
 
 mod utils;
-const BASE_URL: &'static str = "https://raw.githubusercontent.com";
 fn log_request(req: &Request) {
     console_log!(
         "{} - [{}], located at: {:?}, within: {}",
@@ -18,7 +17,11 @@ fn log_request(req: &Request) {
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
     log_request(&req);
+    let mut BASE_URL = "https://raw.githubusercontent.com".to_string();
 
+    if let Ok(base_url) = env.var("BASE_URL") {
+        BASE_URL = base_url.to_string();
+    }
     // Optionally, get more helpful error messages written to the console in the case of a panic.
     utils::set_panic_hook();
     let router = Router::new();
@@ -38,13 +41,25 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     }
 
     let newUrl = format!("{}/{}", BASE_URL, path);
+    console_log!("access url: {}", newUrl);
     if let Ok(u) = Url::from_str(&newUrl) {
         let client = reqwest::Client::new();
         let mut req = client.get(u);
         if isVerify {
-            if let Ok(githubToken) = env.secret("GITHUB_TOKEN") {
-               req= req.bearer_auth(githubToken.to_string());
+            console_log!("token is verfied, add auth");
+            if let Ok(username) = env.secret("BITBUCKET_USERNAME") {
+                if let Ok(password) = env.secret("BITBUCKET_PASSWORD") {
+                    console_log!("use bitbucket");
+                    req = req.basic_auth(username.to_string(), Some(password.to_string()));
+                }
+            } else {
+                if let Ok(githubToken) = env.secret("GITHUB_TOKEN") {
+                    console_log!("use github");
+                    req = req.bearer_auth(githubToken.to_string());
+                }
             }
+        } else {
+            console_log!("no token");
         }
         let resp = req.send().await.map_err(|e| e.to_string())?;
         if let Ok(text) = resp.text().await {
@@ -53,5 +68,5 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
             return Response::error("Github access failed", 500);
         }
     }
-    return  Response::error("Invaild path", 400);
+    return Response::error("Invaild path", 400);
 }

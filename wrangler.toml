@@ -5,7 +5,7 @@ compatibility_date = "2022-11-13"
 
 [vars]
 WORKERS_RS_VERSION = "0.0.9"
-# - TOKEN
+BASE_URL="https://api.bitbucket.org/2.0/repositories"
 # - GITHUB_TOKEN
 [build]
 command = "cargo install -q worker-build && worker-build --release" # required
