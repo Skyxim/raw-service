@@ -21,3 +21,7 @@ type = "CompiledWasm"
 
 # read more about configuring your Worker via wrangler.toml at:
 # https://developers.cloudflare.com/workers/cli-wrangler/configuration
+[[kv_namespaces]]
+binding="RAW_SERVICE_KV"
+id="fd2c568cbcd74b96b26455f8816a9e12"
+preview_id="04fb03c22c81432ba76b17cec0127ca1"
