@@ -30,9 +30,10 @@ impl BackendType {
             }
             BackendType::Gitlab(url) => {
                 // 处理 username/repository/raw/branch/filepath
+                // username/repository/raw/-/branch/filepath
                 // 到 /api/v4/projects/${project_id}/repository/files/${filepath}/raw?ref=${branch}
                 // 其中 project_id 使用 username 和 repository 通过 https://gitlab.com/api/v4/projects?owned=true&simple=true 获取
-                let reg = RegExp::new("/(.+?/.+?)/raw/(.+?)/(.+)", "g");
+                let reg = RegExp::new("/(.+?/.+?)(/-)?/raw/(.+?)/(.+)", "g");
                 if let Some(arr) = reg.exec(path) {
                     let username_and_repo = arr
                         .get(1)
@@ -40,11 +41,11 @@ impl BackendType {
                         .ok_or(String::from("not found username and repo"))?
                         .to_lowercase();
                     let filepath = arr
-                        .get(3)
+                        .get(arr.length()-1)
                         .as_string()
                         .ok_or(String::from("not found file path"))?;
                     let branch = arr
-                        .get(2)
+                        .get(arr.length()-2)
                         .as_string()
                         .ok_or(String::from("not found branch"))?;
                     let mut repo = Repos::new(env)?;
