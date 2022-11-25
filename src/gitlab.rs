@@ -1,17 +1,14 @@
 pub mod gitlab {
     use std::{
-        collections::{hash_map, HashMap},
-        f32::consts::E,
-        fs::Metadata,
+        collections::{HashMap},
         str::FromStr,
-        string, vec,
     };
 
-    use reqwest::{Method, Url};
+    use reqwest::{Url};
     use serde::{Deserialize, Serialize};
-    use worker::{console_debug, console_log, worker_sys::cache, Env};
+    use worker::{console_debug, Env};
 
-    use crate::_worker_fetch::fetch;
+    
 
     #[derive(Serialize, Deserialize)]
     struct RepoInfo {

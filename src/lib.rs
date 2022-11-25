@@ -1,7 +1,7 @@
-use std::{fmt::Display, str::FromStr, string};
+use std::{fmt::Display, str::FromStr};
 
 use gitlab::gitlab::Repos;
-use reqwest::header::{HeaderMap, HeaderValue};
+
 use worker::{js_sys::RegExp, *};
 mod gitlab;
 mod utils;
@@ -26,7 +26,7 @@ impl BackendType {
     pub async fn parse_url(&self, path: &str, env: &Env) -> std::result::Result<Url, String> {
         match self {
             BackendType::Bitbucket(url) | BackendType::Github(url) => {
-                return Url::from_str(&format!("{}/{}", &self, path)).map_err(|op| op.to_string());
+                return Url::from_str(&format!("{}/{}", url, path)).map_err(|op| op.to_string());
             }
             BackendType::Gitlab(url) => {
                 // 处理 username/repository/raw/branch/filepath
@@ -82,23 +82,22 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     };
     // Optionally, get more helpful error messages written to the console in the case of a panic.
     utils::set_panic_hook();
-    let router = Router::new();
     if req.method() != Method::Get {
         return Response::error("Method Not Allowed", 405);
     }
 
     let path = req.path();
-    let mut isVerify = false;
+    let mut is_verify = false;
     if let Ok(token) = env.secret("TOKEN") {
         let url = req.url()?;
         let ok = url
             .query_pairs()
             .find(|param| param.0.to_lowercase() == "token" && param.1 == token.to_string())
             .is_some();
-        isVerify = ok;
+        is_verify = ok;
     }
 
-    if isVerify {
+    if is_verify {
         let u = backend_type.parse_url(&path, &env).await?;
         console_log!("access url: {}", u);
         let client = reqwest::Client::new();
