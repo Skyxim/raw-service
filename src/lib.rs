@@ -1,7 +1,6 @@
 use std::{fmt::Display, str::FromStr};
 
 use gitlab::gitlab::Repos;
-
 use worker::{js_sys::RegExp, *};
 mod gitlab;
 mod utils;
@@ -41,18 +40,19 @@ impl BackendType {
                         .ok_or(String::from("not found username and repo"))?
                         .to_lowercase();
                     let filepath = arr
-                        .get(arr.length()-1)
+                        .get(arr.length() - 1)
                         .as_string()
                         .ok_or(String::from("not found file path"))?;
                     let branch = arr
-                        .get(arr.length()-2)
+                        .get(arr.length() - 2)
                         .as_string()
                         .ok_or(String::from("not found branch"))?;
                     let mut repo = Repos::new(env)?;
                     let id = repo.get_id(&username_and_repo).await?;
+                    let filepath = urlencoding::encode(&filepath).into_owned();
                     return Url::from_str(&format!(
                         "{}/api/v4/projects/{}/repository/files/{}/raw?ref={}",
-                        url, id, filepath, branch
+                        url, id,filepath, branch
                     ))
                     .map_err(|op| op.to_string());
                 }
