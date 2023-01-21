@@ -30,7 +30,7 @@ impl BackendType {
             BackendType::Gitlab(url) => {
                 // 处理 username/repository/raw/branch/filepath
                 // username/repository/raw/-/branch/filepath
-                // 到 /api/v4/projects/${project_id}/repository/files/${filepath}/raw?ref=${branch}
+                // 到 /api/v4/projects/${project_id}/repository/files/${filepath}/raw?ref=${branch} 注：filepath 需要进行 urlencode 编码
                 // 其中 project_id 使用 username 和 repository 通过 https://gitlab.com/api/v4/projects?owned=true&simple=true 获取
                 let reg = RegExp::new("/(.+?/.+?)(/-)?/raw/(.+?)/(.+)", "g");
                 if let Some(arr) = reg.exec(path) {
