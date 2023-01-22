@@ -24,8 +24,11 @@ enum BackendType {
 impl BackendType {
     pub async fn parse_url(&self, path: &str, env: &Env) -> std::result::Result<Url, String> {
         match self {
-            BackendType::Bitbucket(url) | BackendType::Github(url) => {
+            BackendType::Bitbucket(url) => {
                 return Url::from_str(&format!("{}/{}", url, path)).map_err(|op| op.to_string());
+            }
+            BackendType::Github(url) => {
+                return Url::from_str(&format!("{}/{}", url, parse_github_path(path).unwrap_or_default())).map_err(|op|op.to_string());
             }
             BackendType::Gitlab(url) => {
                 // 处理 username/repository/raw/branch/filepath
@@ -52,7 +55,7 @@ impl BackendType {
                     let filepath = urlencoding::encode(&filepath).into_owned();
                     return Url::from_str(&format!(
                         "{}/api/v4/projects/{}/repository/files/{}/raw?ref={}",
-                        url, id,filepath, branch
+                        url, id, filepath, branch
                     ))
                     .map_err(|op| op.to_string());
                 }
@@ -97,11 +100,11 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         is_verify = ok;
     }
 
+    let u = backend_type.parse_url(&path, &env).await?;
+    console_log!("access url: {}", u);
+    let client = reqwest::Client::new();
+    let mut req = client.get(u);
     if is_verify {
-        let u = backend_type.parse_url(&path, &env).await?;
-        console_log!("access url: {}", u);
-        let client = reqwest::Client::new();
-        let mut req = client.get(u);
         console_log!("token is verfied, add auth");
         match backend_type {
             BackendType::Github(_) => {
@@ -120,17 +123,13 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
                 req = req.bearer_auth(token);
             }
         }
-
-        let resp = req.send().await.map_err(|e| e.to_string())?;
-        if let Ok(text) = resp.text().await {
-            return Response::ok(text);
-        } else {
-            return Response::error("Github access failed", 500);
-        }
-    } else {
-        console_log!("Not found token")
     }
-    return Response::error("Invaild path", 400);
+    let resp = req.send().await.map_err(|e| e.to_string())?;
+    if let Ok(text) = resp.text().await {
+        return Response::ok(text);
+    } else {
+        return Response::error("Github access failed", 500);
+    }
 }
 
 fn parse_backend_type(b_type: &str) -> BackendType {
@@ -139,4 +138,15 @@ fn parse_backend_type(b_type: &str) -> BackendType {
         "BITBUCKET" => BackendType::Bitbucket(String::from("https://api.bitbucket.org")),
         _ => BackendType::Gitlab(String::from("https://gitlab.com")),
     }
+}
+
+fn parse_github_path(path: &str) -> Option<String> {
+    let reg_exp = RegExp::new("/(.+?/.+?)(/raw)?(/.+?)(/.+)", "g");
+    if let Some(ret) = reg_exp.exec(path) {
+        let username_and_repo = ret.get(1).as_string().or(None)?.to_lowercase();
+        let filepath = ret.get(ret.length() - 1).as_string().or(None)?;
+        let branch = ret.get(ret.length() - 2).as_string().or(None)?;
+        return Some(format!("{}{}{}", username_and_repo, branch, filepath).to_string());
+    }
+    None
 }
