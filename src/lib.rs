@@ -113,7 +113,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
         if t.to_lowercase() == "adguardhome" {
             handle = Some(|s: &str| {
                 if s.starts_with(".") {
-                    format!("||{}^", s[1..].to_string()).to_string()
+                    format!("||{}^", &s[1..]).to_string()
                 } else {
                     s.to_string()
                 }
