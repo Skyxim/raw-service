@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 use gitlab::gitlab::Repos;
 use worker::{js_sys::RegExp, *};
@@ -28,7 +28,12 @@ impl BackendType {
                 return Url::from_str(&format!("{}/{}", url, path)).map_err(|op| op.to_string());
             }
             BackendType::Github(url) => {
-                return Url::from_str(&format!("{}/{}", url, parse_github_path(path).unwrap_or_default())).map_err(|op|op.to_string());
+                return Url::from_str(&format!(
+                    "{}/{}",
+                    url,
+                    parse_github_path(path).unwrap_or_default()
+                ))
+                .map_err(|op| op.to_string());
             }
             BackendType::Gitlab(url) => {
                 // 处理 username/repository/raw/branch/filepath
@@ -78,6 +83,7 @@ impl Display for BackendType {
 #[event(fetch)]
 pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Response> {
     log_request(&req);
+    let mut handle = None;
     let backend_type = if let Ok(backend) = env.var("BACKEND") {
         parse_backend_type(&backend.to_string())
     } else {
@@ -88,18 +94,32 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     if req.method() != Method::Get {
         return Response::error("Method Not Allowed", 405);
     }
-
+    let url = req.url()?;
     let path = req.path();
     let mut is_verify = false;
+    let params = url
+        .query_pairs()
+        .into_iter()
+        .map(|param| (param.0.to_lowercase(), param.1.to_string()))
+        .collect::<HashMap<String, String>>();
     if let Ok(token) = env.secret("TOKEN") {
-        let url = req.url()?;
-        let ok = url
-            .query_pairs()
-            .find(|param| param.0.to_lowercase() == "token" && param.1 == token.to_string())
-            .is_some();
-        is_verify = ok;
+        if let Some(param_token) = params.get("token") {
+            if token.to_string() == *param_token {
+                is_verify = true;
+            }
+        }
     }
-
+    if let Some(t) = params.get("type") {
+        if t.to_lowercase() == "adguardhome" {
+            handle = Some(|s: &str| {
+                if s.starts_with(".") {
+                    format!("||{}^", s[1..].to_string()).to_string()
+                } else {
+                    s.to_string()
+                }
+            })
+        }
+    }
     let u = backend_type.parse_url(&path, &env).await?;
     console_log!("access url: {}", u);
     let client = reqwest::Client::new();
@@ -126,7 +146,7 @@ pub async fn main(req: Request, env: Env, _ctx: worker::Context) -> Result<Respo
     }
     let resp = req.send().await.map_err(|e| e.to_string())?;
     if let Ok(text) = resp.text().await {
-        return Response::ok(text);
+        return Response::ok(handle_format(text.as_str(), handle));
     } else {
         return Response::error("Github access failed", 500);
     }
@@ -149,4 +169,25 @@ fn parse_github_path(path: &str) -> Option<String> {
         return Some(format!("{}{}{}", username_and_repo, branch, filepath).to_string());
     }
     None
+}
+
+fn handle_format<H>(content: &str, handle: Option<H>) -> String
+where
+    H: Fn(&str) -> String,
+{
+    let lines = content
+        .split("\n")
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<&str>>();
+    let lines = lines
+        .iter()
+        .map(|s| {
+            if let Some(h) = &handle {
+                h(s)
+            } else {
+                s.to_string()
+            }
+        })
+        .collect::<Vec<String>>();
+    return lines.join("\n").to_string();
 }
